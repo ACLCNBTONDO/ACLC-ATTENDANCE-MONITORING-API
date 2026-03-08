@@ -1,0 +1,11 @@
+# AttendEase .gitignore
+
+# Never commit sensitive config overrides
+.env
+*.log
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
