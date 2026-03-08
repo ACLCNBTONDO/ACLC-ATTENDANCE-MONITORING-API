@@ -1,52 +1,60 @@
 <?php
-/**
- * config/cors.php
- * Sets headers so the frontend HTML file can talk to this PHP backend.
- * Include this at the top of every API file.
- */
 
-// Allow the frontend to call this API
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-header('Content-Type: application/json; charset=utf-8');
+$allowed_origins = [
+    'https://aclc-attendance-monitoring-web.vercel.app',
+    'http://localhost',
+    'http://127.0.0.1',
+];
 
-// Handle browser preflight requests
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+if (in_array($origin, $allowed_origins)) {
+    header("Access-Control-Allow-Origin: $origin");
+} else {
+    header("Access-Control-Allow-Origin: https://aclc-attendance-monitoring-web.vercel.app");
+}
+
+header("Access-Control-Allow-Credentials: true");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+
+// Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
 
-// ─── Helper: send a JSON response and stop ───────────────
+header('Content-Type: application/json');
+
+// ── Helpers ──────────────────────────────────────────
 function respond($data, $code = 200) {
     http_response_code($code);
     echo json_encode($data);
     exit;
 }
 
-function respondError($message, $code = 400) {
-    respond(['success' => false, 'error' => $message], $code);
+function respondError($msg, $code = 400) {
+    http_response_code($code);
+    echo json_encode(['error' => $msg]);
+    exit;
 }
 
-// ─── Helper: get JSON body from POST requests ────────────
 function getBody() {
     return json_decode(file_get_contents('php://input'), true) ?? [];
 }
 
-// ─── Helper: require a valid session ─────────────────────
 function requireAuth() {
     session_start();
-    if (empty($_SESSION['user'])) {
-        respondError('Not authenticated. Please log in.', 401);
+    if (empty($_SESSION['user_id'])) {
+        respondError('Unauthorized', 401);
     }
-    return $_SESSION['user'];
+    return $_SESSION;
 }
 
-// ─── Helper: require a specific role ─────────────────────
-function requireRole(...$roles) {
-    $user = requireAuth();
-    if (!in_array($user['role'], $roles)) {
-        respondError('Access denied for your role.', 403);
+function requireRole($role) {
+    $session = requireAuth();
+    if ($session['role'] !== $role) {
+        respondError('Forbidden', 403);
     }
-    return $user;
+    return $session;
 }
