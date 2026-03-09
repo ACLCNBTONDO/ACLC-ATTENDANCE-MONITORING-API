@@ -1,57 +1,56 @@
 <?php
 ini_set('display_errors', 0);
 error_reporting(0);
-require_once '../config/db.php';
+require_once __DIR__ . '/../config/db.php';
 
-$user    = requireRole('admin', 'teacher');
+$user    = requireAuth();
+if (!in_array($user['role'], ['admin','teacher'])) respondError('Forbidden', 403);
 $db      = getDB();
 $date    = $_GET['date'] ?? date('Y-m-d');
 $section = $user['role'] === 'teacher' ? $user['section'] : null;
 
-// ── Today's stats ─────────────────────────────────────────────────────
-$whereSection = $section ? "AND st.section = '$section'" : '';
-$stmt = $db->prepare("
-    SELECT
-        COUNT(st.usn) AS total,
-        SUM(CASE WHEN a.remarks IS NOT NULL AND a.remarks != '' AND a.remarks NOT LIKE '%tardy%' AND a.remarks NOT LIKE '%late%' THEN 1 ELSE 0 END) AS present,
-        SUM(CASE WHEN a.usn IS NULL OR (a.remarks IS NULL AND a.scanned_at IS NULL) THEN 1 ELSE 0 END) AS absent,
-        SUM(CASE WHEN a.remarks LIKE '%tardy%' OR a.remarks LIKE '%late%' THEN 1 ELSE 0 END) AS late
+// Today's stats
+$where = $section ? "AND st.section = ?" : "";
+$sql   = "SELECT
+    COUNT(st.usn) AS total,
+    SUM(CASE WHEN a.remarks IS NOT NULL AND a.remarks!='' AND a.remarks NOT LIKE '%tardy%' AND a.remarks NOT LIKE '%late%' THEN 1 ELSE 0 END) AS present,
+    SUM(CASE WHEN a.usn IS NULL OR (a.remarks IS NULL AND a.scanned_at IS NULL) THEN 1 ELSE 0 END) AS absent,
+    SUM(CASE WHEN a.remarks LIKE '%tardy%' OR a.remarks LIKE '%late%' THEN 1 ELSE 0 END) AS late
     FROM students st
-    LEFT JOIN attendance a ON a.usn = st.usn AND a.attendance_date = ?
-    " . ($section ? "WHERE st.section = ?" : "")
-);
-if ($section) { $stmt->bind_param('ss', $date, $section); }
-else          { $stmt->bind_param('s',  $date); }
+    LEFT JOIN attendance a ON a.usn=st.usn AND a.attendance_date=?
+    $where";
+$stmt = $db->prepare($sql);
+if ($section) $stmt->bind_param('ss', $date, $section);
+else          $stmt->bind_param('s',  $date);
 $stmt->execute();
 $stats = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 // Section count
-$scStmt = $db->prepare("SELECT COUNT(DISTINCT section) AS cnt FROM students WHERE section IS NOT NULL AND section != ''");
-$scStmt->execute();
-$scRow = $scStmt->get_result()->fetch_assoc();
-$scStmt->close();
+$sc = $db->query("SELECT COUNT(DISTINCT section) AS cnt FROM students WHERE section IS NOT NULL AND section!=''");
+$scRow = $sc->fetch_assoc();
 
-// ── Weekly data ───────────────────────────────────────────────────────
+// Weekly
 $weekly = [];
 for ($i = 6; $i >= 0; $i--) {
     $d = date('Y-m-d', strtotime("-$i days", strtotime($date)));
     if ($section) {
-        $wStmt = $db->prepare("SELECT COUNT(a.usn) AS present FROM attendance a JOIN students st ON st.usn=a.usn WHERE a.attendance_date=? AND (a.remarks IS NOT NULL AND a.remarks != '') AND st.section=?");
-        $wStmt->bind_param('ss', $d, $section);
+        $w = $db->prepare("SELECT COUNT(a.usn) AS present FROM attendance a JOIN students st ON st.usn=a.usn WHERE a.attendance_date=? AND a.remarks IS NOT NULL AND a.remarks!='' AND st.section=?");
+        $w->bind_param('ss', $d, $section);
     } else {
-        $wStmt = $db->prepare("SELECT COUNT(usn) AS present FROM attendance WHERE attendance_date=? AND remarks IS NOT NULL AND remarks != ''");
-        $wStmt->bind_param('s', $d);
+        $w = $db->prepare("SELECT COUNT(usn) AS present FROM attendance WHERE attendance_date=? AND remarks IS NOT NULL AND remarks!=''");
+        $w->bind_param('s', $d);
     }
-    $wStmt->execute();
-    $wRow = $wStmt->get_result()->fetch_assoc();
-    $wStmt->close();
-    $weekly[] = ['date' => $d, 'day' => date('D', strtotime($d)), 'present' => intval($wRow['present'])];
+    $w->execute();
+    $wRow = $w->get_result()->fetch_assoc();
+    $w->close();
+    $weekly[] = ['date' => $d, 'day' => date('D', strtotime($d)), 'present' => (int)$wRow['present']];
 }
 
+$db->close();
 respond([
     'success'       => true,
-    'stats'         => ['total'=>intval($stats['total']),'present'=>intval($stats['present']),'absent'=>intval($stats['absent']),'late'=>intval($stats['late'])],
-    'section_count' => intval($scRow['cnt']),
+    'stats'         => ['total'=>(int)$stats['total'],'present'=>(int)$stats['present'],'absent'=>(int)$stats['absent'],'late'=>(int)$stats['late']],
+    'section_count' => (int)$scRow['cnt'],
     'weekly'        => $weekly
 ]);

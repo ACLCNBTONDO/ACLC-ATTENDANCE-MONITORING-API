@@ -1,21 +1,16 @@
 <?php
 ini_set('display_errors', 0);
 error_reporting(0);
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(['error' => 'Method not allowed']); exit;
-}
-
 require_once __DIR__ . '/../config/db.php';
 
-$body     = json_decode(file_get_contents('php://input'), true) ?? [];
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { respondError('Method not allowed', 405); }
+
+$body     = getBody();
 $username = trim($body['username'] ?? '');
 $password = trim($body['password'] ?? '');
 $role     = trim($body['role']     ?? '');
 
-if (!$username || !$password || !$role) {
-    echo json_encode(['error' => 'All fields are required.']); exit;
-}
+if (!$username || !$password || !$role) respondError('All fields are required.');
 
 $db   = getDB();
 $stmt = $db->prepare("SELECT id, username, password, role, name, initials, section, usn FROM users WHERE username = ? AND role = ? LIMIT 1");
@@ -24,25 +19,19 @@ $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-if (!$user) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Incorrect username or password.']); exit;
-}
+if (!$user) { http_response_code(401); respondError('Incorrect username or password.', 401); }
 
 $ok = password_verify($password, $user['password']) || ($password === $user['password']);
-if (!$ok) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Incorrect username or password.']); exit;
-}
+if (!$ok) respondError('Incorrect username or password.', 401);
 
-$token = md5(uniqid('a', true)) . md5(uniqid('b', true));
+$token = md5(uniqid('', true)) . md5(uniqid('', true));
 $upd   = $db->prepare("UPDATE users SET auth_token = ? WHERE id = ?");
 $upd->bind_param('si', $token, $user['id']);
 $upd->execute();
 $upd->close();
 $db->close();
 
-echo json_encode([
+respond([
     'success' => true,
     'token'   => $token,
     'user'    => [
