@@ -1,7 +1,9 @@
 <?php
-// index.php — Entry point for Railway PHP server
+// Suppress HTML error output — errors must be JSON only
+ini_set('display_errors', 0);
+error_reporting(0);
 
-// Handle CORS preflight OPTIONS at the top level before any routing
+// CORS headers at the very top before anything else
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 $allowed = [
     'https://aclc-attendance-monitoring-web.vercel.app',
@@ -27,13 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $uri = ltrim($uri, '/');
 
-// Route to setup.php
 if ($uri === 'setup.php') {
     require __DIR__ . '/setup.php';
     exit;
 }
 
-// Route api/* requests
 if (strpos($uri, 'api/') === 0) {
     $file = __DIR__ . '/' . $uri;
     if (file_exists($file)) {
@@ -46,6 +46,5 @@ if (strpos($uri, 'api/') === 0) {
     exit;
 }
 
-// Default — API status
 header('Content-Type: application/json');
 echo json_encode(['status' => 'ACLC Monitor API is running!', 'version' => '2.0']);
