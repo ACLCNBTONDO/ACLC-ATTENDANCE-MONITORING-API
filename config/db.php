@@ -1,27 +1,28 @@
 <?php
 ini_set('display_errors', 0);
 error_reporting(0);
+if (!defined('ROOT')) define('ROOT', dirname(__DIR__));
 
 function getDB() {
     $url = getenv('MYSQL_URL') ?: getenv('DATABASE_URL') ?: null;
     if ($url) {
         $p    = parse_url($url);
-        $host = $p['host'];
-        $port = (int)($p['port'] ?? 3306);
-        $user = $p['user'];
-        $pass = urldecode($p['pass'] ?? '');
-        $name = ltrim($p['path'], '/');
+        $host = $p['host']               ?? 'localhost';
+        $port = (int)($p['port']         ?? 3306);
+        $user = $p['user']               ?? 'root';
+        $pass = urldecode($p['pass']     ?? '');
+        $name = ltrim($p['path']         ?? '/railway', '/');
     } else {
-        $host = getenv('MYSQLHOST')     ?: 'localhost';
-        $port = (int)(getenv('MYSQLPORT') ?: 3306);
-        $user = getenv('MYSQLUSER')     ?: 'root';
-        $pass = getenv('MYSQLPASSWORD') ?: '';
-        $name = getenv('MYSQLDATABASE') ?: 'railway';
+        $host = getenv('MYSQLHOST')      ?: 'localhost';
+        $port = (int)(getenv('MYSQLPORT')?: 3306);
+        $user = getenv('MYSQLUSER')      ?: 'root';
+        $pass = getenv('MYSQLPASSWORD')  ?: '';
+        $name = getenv('MYSQLDATABASE')  ?: 'railway';
     }
     $db = @new mysqli($host, $user, $pass, $name, $port);
     if ($db->connect_error) {
         http_response_code(500);
-        echo json_encode(['error' => 'DB failed: ' . $db->connect_error]);
+        echo json_encode(['error' => 'DB connection failed: ' . $db->connect_error]);
         exit;
     }
     $db->set_charset('utf8mb4');

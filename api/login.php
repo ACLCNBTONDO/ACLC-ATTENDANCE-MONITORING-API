@@ -4,26 +4,32 @@ error_reporting(0);
 if (!defined('ROOT')) define('ROOT', dirname(__DIR__));
 require_once ROOT . '/config/db.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') { respondError('Method not allowed', 405); }
-$b = getBody();
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') respondError('Method not allowed', 405);
+
+$b        = getBody();
 $username = trim($b['username'] ?? '');
 $password = trim($b['password'] ?? '');
 $role     = trim($b['role']     ?? '');
+
 if (!$username || !$password || !$role) respondError('All fields required.');
+if (!in_array($role, ['admin','teacher','student'])) respondError('Invalid role.');
 
 $db   = getDB();
-$stmt = $db->prepare("SELECT id, username, password, role, name, initials, section, usn FROM users WHERE username=? AND role=? LIMIT 1");
+$stmt = $db->prepare("SELECT id, username, password, role, name, initials, section, usn FROM users WHERE username = ? AND role = ? LIMIT 1");
 $stmt->bind_param('ss', $username, $role);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$user) respondError('Incorrect username or password.', 401);
+
+// Support plain-text passwords (older records) and hashed passwords
 $ok = password_verify($password, $user['password']) || ($password === $user['password']);
 if (!$ok) respondError('Incorrect username or password.', 401);
 
-$token = md5(uniqid('',true)) . md5(uniqid('',true));
-$upd   = $db->prepare("UPDATE users SET auth_token=? WHERE id=?");
+// Generate and store token
+$token = md5(uniqid('', true)) . md5(uniqid('', true));
+$upd   = $db->prepare("UPDATE users SET auth_token = ? WHERE id = ?");
 $upd->bind_param('si', $token, $user['id']);
 $upd->execute();
 $upd->close();
