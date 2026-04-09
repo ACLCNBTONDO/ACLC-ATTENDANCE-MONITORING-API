@@ -21,14 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $uri = ltrim($uri, '/');
 
-// Root
 if ($uri === '' || $uri === 'index.php') {
     ob_end_clean();
     echo json_encode(['status' => 'ACLC Monitor API is running!', 'version' => '2.0']);
     exit;
 }
 
-// Any .php file at root level (setup.php, dbcheck.php, etc.)
 if (preg_match('/^[\w\-]+\.php$/', $uri)) {
     $file = __DIR__ . '/' . $uri;
     if (file_exists($file)) {
@@ -38,7 +36,6 @@ if (preg_match('/^[\w\-]+\.php$/', $uri)) {
     }
 }
 
-// api/* files
 if (strpos($uri, 'api/') === 0) {
     $file = __DIR__ . '/' . $uri;
     if (file_exists($file)) {
