@@ -1,17 +1,6 @@
 <?php
-$allowed_origins = [
-    'https://aclc-attendance-monitoring-web.vercel.app',
-    'http://localhost',
-    'http://localhost:3000',
-    'http://127.0.0.1',
-];
-
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (in_array($origin, $allowed_origins)) {
-    header("Access-Control-Allow-Origin: $origin");
-} else {
-    header("Access-Control-Allow-Origin: https://aclc-attendance-monitoring-web.vercel.app");
-}
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
+header("Access-Control-Allow-Origin: $origin");
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Requested-With");
