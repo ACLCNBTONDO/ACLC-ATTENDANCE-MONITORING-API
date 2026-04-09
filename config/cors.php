@@ -1,16 +1,9 @@
 <?php
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
-header("Access-Control-Allow-Origin: $origin");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Requested-With");
-header("Access-Control-Max-Age: 86400");
-header("Content-Type: application/json");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    echo '{}';
-    exit;
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if (str_contains($origin, 'vercel.app') || str_contains($origin, 'localhost') || str_contains($origin, '127.0.0.1')) {
+    header("Access-Control-Allow-Origin: $origin");
+} else {
+    header("Access-Control-Allow-Origin: *");
 }
 
 function respond($data, $code = 200) {
