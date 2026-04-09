@@ -1,34 +1,106 @@
 <?php
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
-require_once 'config/db.php';
 
-echo "<h2 style='font-family:Arial;color:#003087'>AttendEase Setup</h2>";
-
-$db = getDB();
-echo "<p style='color:green'>✅ Connected to database!</p>";
-
-// Add auth_token column if not exists
-$result = $db->query("DESCRIBE users");
-$cols = [];
-while ($row = $result->fetch_assoc()) $cols[] = $row['Field'];
-
-if (!in_array('auth_token', $cols)) {
-    $db->query("ALTER TABLE users ADD COLUMN auth_token VARCHAR(64) DEFAULT NULL");
-    echo "<p style='color:green'>✅ Added auth_token column</p>";
+$url = getenv('MYSQL_URL') ?: getenv('DATABASE_URL') ?: null;
+if ($url) {
+    $p    = parse_url($url);
+    $host = $p['host'];
+    $port = (int)($p['port'] ?? 3306);
+    $user = $p['user'];
+    $pass = urldecode($p['pass'] ?? '');
+    $name = ltrim($p['path'], '/');
 } else {
-    echo "<p style='color:green'>✅ auth_token column already exists</p>";
+    $host = getenv('MYSQLHOST')     ?: 'localhost';
+    $port = (int)(getenv('MYSQLPORT') ?: 3306);
+    $user = getenv('MYSQLUSER')     ?: 'root';
+    $pass = getenv('MYSQLPASSWORD') ?: '';
+    $name = getenv('MYSQLDATABASE') ?: 'railway';
 }
 
-// Check tables exist
-foreach (['students', 'users', 'attendance'] as $table) {
-    $r = $db->query("SHOW TABLES LIKE '$table'");
-    if ($r->num_rows > 0) {
-        echo "<p style='color:green'>✅ Table '$table' exists</p>";
+$db = new mysqli($host, $user, $pass, $name, $port);
+if ($db->connect_error) {
+    die("<p style='font-family:Arial;color:red'>❌ Connection failed: " . $db->connect_error . "</p>");
+}
+$db->set_charset('utf8mb4');
+
+function run($db, $label, $sql) {
+    if ($db->query($sql)) {
+        echo "<p style='font-family:Arial;color:green'>✅ $label</p>";
     } else {
-        echo "<p style='color:red'>❌ Table '$table' MISSING — please import database.sql</p>";
+        echo "<p style='font-family:Arial;color:red'>❌ $label: " . htmlspecialchars($db->error) . "</p>";
     }
 }
 
+echo "<h2 style='font-family:Arial;color:#003087'>ACLC Setup</h2>";
+echo "<p style='font-family:Arial;color:green'>✅ Connected to database!</p><br/>";
+
+run($db, 'Create users table', "
+CREATE TABLE IF NOT EXISTS users (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    username   VARCHAR(100) NOT NULL UNIQUE,
+    password   VARCHAR(255) NOT NULL,
+    role       ENUM('admin','teacher','student') NOT NULL DEFAULT 'student',
+    name       VARCHAR(200) NOT NULL,
+    initials   VARCHAR(10)  DEFAULT NULL,
+    section    VARCHAR(100) DEFAULT NULL,
+    usn        VARCHAR(50)  DEFAULT NULL,
+    auth_token VARCHAR(64)  DEFAULT NULL,
+    created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+
+run($db, 'Create students table', "
+CREATE TABLE IF NOT EXISTS students (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    usn            VARCHAR(50)  NOT NULL UNIQUE,
+    last_name      VARCHAR(100) NOT NULL,
+    first_name     VARCHAR(100) NOT NULL,
+    middle_name    VARCHAR(100) DEFAULT NULL,
+    age            INT          DEFAULT NULL,
+    sex            ENUM('Male','Female') DEFAULT NULL,
+    lrn            VARCHAR(20)  DEFAULT NULL,
+    section        VARCHAR(100) DEFAULT NULL,
+    guardian_email VARCHAR(200) DEFAULT NULL,
+    created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+
+run($db, 'Create attendance table', "
+CREATE TABLE IF NOT EXISTS attendance (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    usn        VARCHAR(50)  NOT NULL,
+    date       DATE         NOT NULL,
+    status     ENUM('present','absent','late') NOT NULL DEFAULT 'absent',
+    time_in    VARCHAR(20)  DEFAULT NULL,
+    scanned_at VARCHAR(20)  DEFAULT NULL,
+    remarks    VARCHAR(255) DEFAULT NULL,
+    marked_by  INT          DEFAULT NULL,
+    created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_attendance (usn, date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+
+// Seed default users
+$users = [
+    ['admin',    password_hash('admin123',   PASSWORD_DEFAULT), 'admin',   'Administrator', 'AD', null,              null],
+    ['teacher1', password_hash('teacher123', PASSWORD_DEFAULT), 'teacher', 'Teacher One',   'T1', 'Grade 11 - STEM', null],
+    ['student1', password_hash('student123', PASSWORD_DEFAULT), 'student', 'Student One',   'S1', 'Grade 11 - STEM', '2024-00101'],
+];
+
+$stmt = $db->prepare("INSERT IGNORE INTO users (username,password,role,name,initials,section,usn) VALUES (?,?,?,?,?,?,?)");
+foreach ($users as $u) {
+    $stmt->bind_param('sssssss', $u[0],$u[1],$u[2],$u[3],$u[4],$u[5],$u[6]);
+    $stmt->execute();
+}
+$stmt->close();
+echo "<p style='font-family:Arial;color:green'>✅ Default users seeded (admin / teacher1 / student1)</p>";
+
+// Seed sample student
+$db->query("INSERT IGNORE INTO students (usn,last_name,first_name,section,sex,age) VALUES ('2024-00101','One','Student','Grade 11 - STEM','Male',17)");
+echo "<p style='font-family:Arial;color:green'>✅ Sample student seeded</p>";
+
 $db->close();
-echo "<h3 style='color:green'>Done! Delete setup.php after running.</h3>";
+echo "<br/><h3 style='font-family:Arial;color:green'>✅ Setup complete! You can now log in.</h3>";
+echo "<p style='font-family:Arial;color:red'><b>Delete or rename setup.php now for security.</b></p>";
