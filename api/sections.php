@@ -2,10 +2,8 @@
 ob_start();
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/cors.php';
-
 $user = requireAuth();
 $db   = getDB();
-
 if ($user['role'] === 'teacher') {
     $stmt = $db->prepare("SELECT section AS name, COUNT(*) AS student_count FROM students WHERE section = ? GROUP BY section");
     $stmt->bind_param('s', $user['section']);

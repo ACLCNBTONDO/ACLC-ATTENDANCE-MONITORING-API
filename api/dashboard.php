@@ -2,7 +2,6 @@
 ob_start();
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/cors.php';
-
 $user    = requireRole('admin', 'teacher');
 $db      = getDB();
 $date    = $_GET['date'] ?? date('Y-m-d');
@@ -39,11 +38,5 @@ for ($i = 6; $i >= 0; $i--) {
     $wStmt->close();
     $weekly[] = ['date' => $d, 'day' => date('D', strtotime($d)), 'present' => intval($wRow['present'])];
 }
-
 ob_end_clean();
-respond([
-    'success'       => true,
-    'stats'         => ['total'=>intval($stats['total']),'present'=>intval($stats['present']),'absent'=>intval($stats['absent']),'late'=>intval($stats['late'])],
-    'section_count' => intval($scRow['cnt']),
-    'weekly'        => $weekly
-]);
+respond(['success' => true, 'stats' => ['total'=>intval($stats['total']),'present'=>intval($stats['present']),'absent'=>intval($stats['absent']),'late'=>intval($stats['late'])], 'section_count' => intval($scRow['cnt']), 'weekly' => $weekly]);
