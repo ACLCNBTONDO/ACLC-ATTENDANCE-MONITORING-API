@@ -2,8 +2,11 @@
 ini_set('display_errors', 0);
 error_reporting(0);
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
-header("Access-Control-Allow-Origin: $origin");
+// CORS
+$origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
+$isOk = preg_match('/^https:\/\/aclc-attendance-monitoring[a-z0-9\-]*\.vercel\.app$/', $origin)
+     || in_array($origin, ['http://localhost','http://localhost:3000','http://127.0.0.1']);
+header("Access-Control-Allow-Origin: " . ($isOk ? $origin : 'https://aclc-attendance-monitoring-bzbv751sz.vercel.app'));
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, X-Auth-Token");
@@ -13,10 +16,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200); echo '{}'; exit;
 }
 
+// DB
 function getDB() {
     $url = getenv('MYSQL_URL') ?: getenv('DATABASE_URL') ?: null;
     if ($url) {
-        $p=parse_url($url);
+        $p=$p=parse_url($url);
         $host=$p['host']; $port=(int)($p['port']??3306);
         $user=$p['user']; $pass=urldecode($p['pass']??'');
         $name=ltrim($p['path'],'/');
