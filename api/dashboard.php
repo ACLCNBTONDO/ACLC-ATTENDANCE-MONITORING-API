@@ -8,10 +8,10 @@ $date    = $_GET['date'] ?? date('Y-m-d');
 $section = $user['role'] === 'teacher' ? $user['section'] : null;
 
 if ($section) {
-    $stmt = $db->prepare("SELECT COUNT(st.usn) AS total, SUM(CASE WHEN a.status='present' THEN 1 ELSE 0 END) AS present, SUM(CASE WHEN a.status='absent' THEN 1 ELSE 0 END) AS absent, SUM(CASE WHEN a.status='late' THEN 1 ELSE 0 END) AS late FROM students st LEFT JOIN attendance a ON a.usn=st.usn AND a.date=? WHERE st.section=?");
+    $stmt = $db->prepare("SELECT COUNT(st.usn) AS total, COUNT(a.id) AS present, 0 AS absent, 0 AS late FROM students st LEFT JOIN attendance a ON a.usn=st.usn AND a.attendance_date=? WHERE st.section=?");
     $stmt->bind_param('ss', $date, $section);
 } else {
-    $stmt = $db->prepare("SELECT COUNT(st.usn) AS total, SUM(CASE WHEN a.status='present' THEN 1 ELSE 0 END) AS present, SUM(CASE WHEN a.status='absent' THEN 1 ELSE 0 END) AS absent, SUM(CASE WHEN a.status='late' THEN 1 ELSE 0 END) AS late FROM students st LEFT JOIN attendance a ON a.usn=st.usn AND a.date=?");
+    $stmt = $db->prepare("SELECT COUNT(st.usn) AS total, COUNT(a.id) AS present, 0 AS absent, 0 AS late FROM students st LEFT JOIN attendance a ON a.usn=st.usn AND a.attendance_date=?");
     $stmt->bind_param('s', $date);
 }
 $stmt->execute();
@@ -27,10 +27,10 @@ $weekly = [];
 for ($i = 6; $i >= 0; $i--) {
     $d = date('Y-m-d', strtotime("-$i days", strtotime($date)));
     if ($section) {
-        $wStmt = $db->prepare("SELECT COUNT(a.usn) AS present FROM attendance a JOIN students st ON st.usn=a.usn WHERE a.date=? AND a.status='present' AND st.section=?");
+        $wStmt = $db->prepare("SELECT COUNT(a.id) AS present FROM attendance a JOIN students st ON st.usn=a.usn WHERE a.attendance_date=? AND st.section=?");
         $wStmt->bind_param('ss', $d, $section);
     } else {
-        $wStmt = $db->prepare("SELECT COUNT(usn) AS present FROM attendance WHERE date=? AND status='present'");
+        $wStmt = $db->prepare("SELECT COUNT(id) AS present FROM attendance WHERE attendance_date=?");
         $wStmt->bind_param('s', $d);
     }
     $wStmt->execute();
