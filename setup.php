@@ -1,43 +1,34 @@
 <?php
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
+require_once 'config/db.php';
 
-// Connect directly without requiring db.php
-$url = getenv('MYSQL_URL') ?: getenv('DATABASE_URL') ?: null;
-if ($url) {
-    $p    = parse_url($url);
-    $host = $p['host'];
-    $port = (int)($p['port'] ?? 3306);
-    $user = $p['user'];
-    $pass = urldecode($p['pass'] ?? '');
-    $name = ltrim($p['path'], '/');
+echo "<h2 style='font-family:Arial;color:#003087'>AttendEase Setup</h2>";
+
+$db = getDB();
+echo "<p style='color:green'>✅ Connected to database!</p>";
+
+// Add auth_token column if not exists
+$result = $db->query("DESCRIBE users");
+$cols = [];
+while ($row = $result->fetch_assoc()) $cols[] = $row['Field'];
+
+if (!in_array('auth_token', $cols)) {
+    $db->query("ALTER TABLE users ADD COLUMN auth_token VARCHAR(64) DEFAULT NULL");
+    echo "<p style='color:green'>✅ Added auth_token column</p>";
 } else {
-    $host = getenv('MYSQLHOST')     ?: 'localhost';
-    $port = (int)(getenv('MYSQLPORT') ?: 3306);
-    $user = getenv('MYSQLUSER')     ?: 'root';
-    $pass = getenv('MYSQLPASSWORD') ?: '';
-    $name = getenv('MYSQLDATABASE') ?: 'railway';
+    echo "<p style='color:green'>✅ auth_token column already exists</p>";
 }
 
-echo "<h2>Connecting to: $host:$port / $name as $user</h2>";
-
-$db = new mysqli($host, $user, $pass, $name, $port);
-if ($db->connect_error) {
-    die("<p style='color:red'>Connection failed: " . $db->connect_error . "</p>");
-}
-echo "<p style='color:green'>✅ Connected!</p>";
-
-$sqls = [
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_token VARCHAR(64) DEFAULT NULL",
-];
-
-foreach ($sqls as $sql) {
-    if ($db->query($sql)) {
-        echo "<p style='color:green'>✅ " . htmlspecialchars($sql) . "</p>";
+// Check tables exist
+foreach (['students', 'users', 'attendance'] as $table) {
+    $r = $db->query("SHOW TABLES LIKE '$table'");
+    if ($r->num_rows > 0) {
+        echo "<p style='color:green'>✅ Table '$table' exists</p>";
     } else {
-        echo "<p style='color:red'>❌ " . htmlspecialchars($db->error) . "</p>";
+        echo "<p style='color:red'>❌ Table '$table' MISSING — please import database.sql</p>";
     }
 }
 
 $db->close();
-echo "<h3 style='color:green'>Done! Delete setup.php now.</h3>";
+echo "<h3 style='color:green'>Done! Delete setup.php after running.</h3>";
