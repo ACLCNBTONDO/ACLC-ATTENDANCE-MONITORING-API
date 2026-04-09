@@ -43,7 +43,18 @@ $date=$_GET['date']??date('Y-m-d');
 if (!$section) { ob_end_clean(); respondError('section is required.'); }
 if ($user['role']==='teacher'&&$user['section']!==$section) { ob_end_clean(); respondError('Access denied.',403); }
 
-$stmt=$db->prepare("SELECT st.usn,st.last_name,st.first_name,st.middle_name,st.sex,st.age,st.lrn,st.section, CONCAT(st.last_name,', ',st.first_name,IF(st.middle_name IS NOT NULL AND st.middle_name!='',CONCAT(' ',LEFT(st.middle_name,1),'.'),'')) AS full_name, COALESCE(a.status,'absent') AS status, COALESCE(a.time_in,'') AS time_in, COALESCE(a.scanned_at,'') AS scanned_at, COALESCE(a.remarks,'') AS remarks FROM students st LEFT JOIN attendance a ON a.usn=st.usn AND a.date=? WHERE st.section=? ORDER BY st.last_name ASC,st.first_name ASC");
+$stmt=$db->prepare("
+    SELECT st.usn, st.last_name, st.first_name, st.middle_name, st.sex, st.age, st.lrn, st.section,
+    CONCAT(st.last_name,', ',st.first_name,IF(st.middle_name IS NOT NULL AND st.middle_name!='',CONCAT(' ',LEFT(st.middle_name,1),'.'),'')) AS full_name,
+    CASE WHEN a.id IS NOT NULL THEN 'present' ELSE 'absent' END AS status,
+    COALESCE(a.time_in,'') AS time_in,
+    COALESCE(a.time_out,'') AS scanned_at,
+    COALESCE(a.remarks,'') AS remarks
+    FROM students st
+    LEFT JOIN attendance a ON a.usn=st.usn AND a.attendance_date=?
+    WHERE st.section=?
+    ORDER BY st.last_name ASC, st.first_name ASC
+");
 $stmt->bind_param('ss',$date,$section); $stmt->execute();
 $result=$stmt->get_result(); $students=[];
 while($row=$result->fetch_assoc()) $students[]=$row;
