@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     usn             VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
     attendance_date DATE         NOT NULL DEFAULT (CURRENT_DATE),
     time_in         TIMESTAMP    NULL,
+    time_out        TIMESTAMP    NULL,
     remarks         VARCHAR(20)  COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PRESENT',
     UNIQUE KEY unique_attendance (usn, attendance_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

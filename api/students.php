@@ -48,7 +48,7 @@ $stmt=$db->prepare("
     CONCAT(st.last_name,', ',st.first_name,IF(st.middle_name IS NOT NULL AND st.middle_name!='',CONCAT(' ',LEFT(st.middle_name,1),'.'),'')) AS full_name,
     CASE WHEN a.id IS NOT NULL THEN 'present' ELSE 'absent' END AS status,
     COALESCE(a.time_in,'') AS time_in,
-    COALESCE(a.time_in,'') AS scanned_at,
+    COALESCE(a.time_out,'') AS scanned_at,
     COALESCE(a.remarks,'') AS remarks
     FROM students st
     LEFT JOIN attendance a ON a.usn=st.usn AND a.attendance_date=?
