@@ -8,7 +8,7 @@ $date   = date('Y-m-d');
 $errors = [];
 
 try {
-    $stmt = $db->prepare("SELECT COUNT(st.usn) AS total, SUM(CASE WHEN a.status='present' THEN 1 ELSE 0 END) AS present FROM students st LEFT JOIN attendance a ON a.usn=st.usn AND a.date=?");
+    $stmt = $db->prepare("SELECT COUNT(st.usn) AS total, SUM(CASE WHEN a.remarks='PRESENT' THEN 1 ELSE 0 END) AS present FROM students st LEFT JOIN attendance a ON a.usn=st.usn AND a.attendance_date=?");
     $stmt->bind_param('s', $date);
     $stmt->execute();
     $stats = $stmt->get_result()->fetch_assoc();
@@ -28,7 +28,7 @@ try {
 }
 
 try {
-    $wStmt = $db->prepare("SELECT COUNT(usn) AS present FROM attendance WHERE date=? AND status='present'");
+    $wStmt = $db->prepare("SELECT COUNT(usn) AS present FROM attendance WHERE attendance_date=? AND remarks='PRESENT'");
     $wStmt->bind_param('s', $date);
     $wStmt->execute();
     $wRow = $wStmt->get_result()->fetch_assoc();

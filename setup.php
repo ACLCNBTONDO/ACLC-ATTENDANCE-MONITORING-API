@@ -68,18 +68,14 @@ CREATE TABLE IF NOT EXISTS students (
 
 run($db, 'Create attendance table', "
 CREATE TABLE IF NOT EXISTS attendance (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    usn        VARCHAR(50)  NOT NULL,
-    date       DATE         NOT NULL,
-    status     ENUM('present','absent','late') NOT NULL DEFAULT 'absent',
-    time_in    VARCHAR(20)  DEFAULT NULL,
-    scanned_at VARCHAR(20)  DEFAULT NULL,
-    remarks    VARCHAR(255) DEFAULT NULL,
-    marked_by  INT          DEFAULT NULL,
-    created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_attendance (usn, date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    usn             VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+    attendance_date DATE         NOT NULL DEFAULT (CURRENT_DATE),
+    time_in         TIMESTAMP    NULL,
+    time_out        TIMESTAMP    NULL,
+    remarks         VARCHAR(20)  COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PRESENT',
+    UNIQUE KEY unique_attendance (usn, attendance_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ");
 
 // Seed default users
