@@ -29,7 +29,7 @@ if ($method==='POST') {
 if ($method==='GET'&&isset($_GET['usn'])) {
     $usn=$_GET['usn']; $days=min(intval($_GET['days']??30),365);
     if ($user['role']==='student'&&$user['usn']!==$usn) { ob_end_clean(); respondError('Access denied.',403); }
-    $stmt=$db->prepare("SELECT attendance_date AS date, time_in, time_out AS scanned_at, remarks FROM attendance WHERE usn=? ORDER BY attendance_date DESC LIMIT ?");
+    $stmt=$db->prepare("SELECT attendance_date AS date, time_in, time_in AS scanned_at, remarks FROM attendance WHERE usn=? ORDER BY attendance_date DESC LIMIT ?");
     $stmt->bind_param('si',$usn,$days); $stmt->execute();
     $result=$stmt->get_result(); $history=[];
     $present=0; $late=0; $absent=0;
