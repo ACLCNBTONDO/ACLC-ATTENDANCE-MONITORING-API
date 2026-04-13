@@ -1,4 +1,16 @@
 <?php
+// Global handlers — ensures every fatal/exception returns valid JSON instead of empty body
+set_exception_handler(function(Throwable $e) {
+    if (ob_get_level()) ob_end_clean();
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    exit;
+});
+set_error_handler(function($errno, $errstr) {
+    throw new ErrorException($errstr, $errno);
+});
+
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (str_contains($origin, 'vercel.app') || str_contains($origin, 'localhost') || str_contains($origin, '127.0.0.1')) {
     header("Access-Control-Allow-Origin: $origin");

@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS users (
 run($db, 'Create students table', "
 CREATE TABLE IF NOT EXISTS students (
     id             INT AUTO_INCREMENT PRIMARY KEY,
-    usn            VARCHAR(50)  NOT NULL UNIQUE,
+    usn            VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL UNIQUE,
     last_name      VARCHAR(100) NOT NULL,
     first_name     VARCHAR(100) NOT NULL,
     middle_name    VARCHAR(100) DEFAULT NULL,

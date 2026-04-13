@@ -19,9 +19,12 @@ function getDB() {
     if ($conn->connect_error) {
         if (ob_get_level()) ob_end_clean();
         http_response_code(500);
-        echo json_encode(['error' => 'DB connection failed: ' . $conn->connect_error]);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'DB connection failed: ' . $conn->connect_error]);
         exit;
     }
     $conn->set_charset('utf8mb4');
+    // Throw exceptions on mysqli errors so they get caught by the global handler
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
     return $conn;
 }
