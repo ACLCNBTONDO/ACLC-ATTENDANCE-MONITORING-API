@@ -35,6 +35,16 @@ function run($db, $label, $sql) {
 echo "<h2 style='font-family:Arial;color:#003087'>ACLC Setup</h2>";
 echo "<p style='font-family:Arial;color:green'>✅ Connected to database!</p><br/>";
 
+// Force collation fix on existing tables first
+run($db, 'Fix collation: students.usn',    "ALTER TABLE students  MODIFY usn VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL");
+run($db, 'Fix collation: users.usn',       "ALTER TABLE users     MODIFY usn VARCHAR(50)  COLLATE utf8mb4_unicode_ci DEFAULT NULL");
+run($db, 'Fix collation: users.username',  "ALTER TABLE users     MODIFY username VARCHAR(100) COLLATE utf8mb4_unicode_ci NOT NULL");
+run($db, 'Fix collation: users.section',   "ALTER TABLE users     MODIFY section VARCHAR(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL");
+run($db, 'Fix collation: students table',  "ALTER TABLE students  CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+run($db, 'Fix collation: users table',     "ALTER TABLE users     CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+run($db, 'Fix collation: attendance table',"ALTER TABLE attendance CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+
+
 run($db, 'Create users table', "
 CREATE TABLE IF NOT EXISTS users (
     id         INT AUTO_INCREMENT PRIMARY KEY,

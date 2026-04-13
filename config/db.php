@@ -24,6 +24,8 @@ function getDB() {
         exit;
     }
     $conn->set_charset('utf8mb4');
+    $conn->query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
+    $conn->query("SET collation_connection = utf8mb4_unicode_ci");
     // Throw exceptions on mysqli errors so they get caught by the global handler
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
     return $conn;
