@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     attendance_date DATE         NOT NULL DEFAULT (CURRENT_DATE),
     time_in         TIMESTAMP    NULL,
     time_out        TIMESTAMP    NULL,
-    remarks         VARCHAR(20)  COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PRESENT',
+    remarks         ENUM('PRESENT','LATE','TARDY','MISSING') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PRESENT',
     UNIQUE KEY unique_attendance (usn, attendance_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ");
@@ -110,3 +110,27 @@ echo "<p style='font-family:Arial;color:green'>✅ Sample student seeded</p>";
 $db->close();
 echo "<br/><h3 style='font-family:Arial;color:green'>✅ Setup complete! You can now log in.</h3>";
 echo "<p style='font-family:Arial;color:red'><b>Delete or rename setup.php now for security.</b></p>";
+
+// ── Add MISSING status to attendance.remarks ─────────────────────────────────
+$col = $db->query("SHOW COLUMNS FROM attendance LIKE 'remarks'");
+if ($col) {
+    $colData = $col->fetch_assoc();
+    run($db, 'Ensure MISSING in attendance.remarks column',
+        "ALTER TABLE attendance MODIFY remarks ENUM('PRESENT','LATE','TARDY','MISSING')
+         COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PRESENT'"
+    );
+}
+
+echo "<h3 style='font-family:Arial;color:#003087;margin-top:24px;'>📧 Email Notification Variables</h3>";
+echo "<table style='font-family:monospace;border-collapse:collapse;font-size:13px;border:1px solid #ddd;'>
+  <tr style='background:#f3f4f6;'><th style='padding:6px 14px;text-align:left;'>Variable</th><th style='padding:6px 14px;text-align:left;'>Example</th><th style='padding:6px 14px;text-align:left;'>Required</th></tr>
+  <tr><td style='padding:6px 14px;'>MAIL_HOST</td><td style='padding:6px 14px;'>smtp.gmail.com</td><td style='padding:6px 14px;'>Yes</td></tr>
+  <tr><td style='padding:6px 14px;'>MAIL_PORT</td><td style='padding:6px 14px;'>587</td><td style='padding:6px 14px;'>Yes</td></tr>
+  <tr><td style='padding:6px 14px;'>MAIL_USERNAME</td><td style='padding:6px 14px;'>school@gmail.com</td><td style='padding:6px 14px;'>Yes</td></tr>
+  <tr><td style='padding:6px 14px;'>MAIL_PASSWORD</td><td style='padding:6px 14px;'>your-app-password</td><td style='padding:6px 14px;'>Yes</td></tr>
+  <tr><td style='padding:6px 14px;'>MAIL_FROM_NAME</td><td style='padding:6px 14px;'>ACLC Attendance System</td><td style='padding:6px 14px;'>No</td></tr>
+  <tr><td style='padding:6px 14px;'>MAIL_ENCRYPTION</td><td style='padding:6px 14px;'>tls</td><td style='padding:6px 14px;'>No</td></tr>
+</table>
+<p style='font-family:Arial;font-size:13px;color:#6b7280;margin-top:8px;'>
+  For Gmail: Google Account → Security → 2-Step Verification → App passwords.
+</p>";
