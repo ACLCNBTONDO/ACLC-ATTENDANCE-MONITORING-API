@@ -1,22 +1,29 @@
 <?php
-// Global handlers — ensures every fatal/exception returns valid JSON instead of empty body
+// ── CORS — handle preflight OPTIONS and set headers on every response ──────────
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
+header('Access-Control-Allow-Origin: ' . $origin);
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, X-Auth-Token, Authorization, Accept');
+header('Access-Control-Allow-Credentials: true');
+header('Access-Control-Max-Age: 86400');
+header('Content-Type: application/json');
+
+// Respond immediately to preflight and stop processing
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Global error/exception → JSON response
 set_exception_handler(function(Throwable $e) {
     if (ob_get_level()) ob_end_clean();
     http_response_code(500);
-    header('Content-Type: application/json');
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     exit;
 });
 set_error_handler(function($errno, $errstr) {
     throw new ErrorException($errstr, $errno);
 });
-
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (str_contains($origin, 'vercel.app') || str_contains($origin, 'localhost') || str_contains($origin, '127.0.0.1')) {
-    header("Access-Control-Allow-Origin: $origin");
-} else {
-    header("Access-Control-Allow-Origin: *");
-}
 
 function respond($data, $code = 200) {
     if (ob_get_level()) ob_end_clean();
@@ -40,7 +47,7 @@ function requireAuth() {
     $token = $_SERVER['HTTP_X_AUTH_TOKEN'] ?? $_GET['token'] ?? '';
     if (!$token) respondError('Unauthorized — please log in.', 401);
     $db   = getDB();
-    $stmt = $db->prepare("SELECT id, username, role, name, initials, section, usn FROM users WHERE auth_token = ? LIMIT 1");
+    $stmt = $db->prepare('SELECT id, username, role, name, initials, section, usn FROM users WHERE auth_token = ? LIMIT 1');
     $stmt->bind_param('s', $token);
     $stmt->execute();
     $user = $stmt->get_result()->fetch_assoc();
