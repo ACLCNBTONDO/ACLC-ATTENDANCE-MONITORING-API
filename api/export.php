@@ -109,7 +109,6 @@ function emptyCell(string $ref, string $style): string
 }
 
 // ── Day-column styles (positions 1–25 = cols D–AB) ───────────────────────────
-// Extracted from original template row 14
 $dayStyles = [
     1 => '254', 2 => '150', 3 => '150', 4 => '151', 5 => '149',
     6 => '152', 7 => '153', 8 => '153', 9 => '153', 10 => '154',
@@ -117,7 +116,6 @@ $dayStyles = [
     16 => '156', 17 => '156', 18 => '156', 19 => '156', 20 => '157',
     21 => '156', 22 => '156', 23 => '156', 24 => '156', 25 => '156',
 ];
-// Cols Z, AA, AB (positions 23-25) use style 259 when empty (beyond school days)
 $emptyDayStyles = [
     1=>'258',2=>'258',3=>'258',4=>'258',5=>'258',6=>'258',7=>'258',8=>'258',
     9=>'258',10=>'258',11=>'258',12=>'258',13=>'258',14=>'258',15=>'258',
@@ -140,7 +138,7 @@ function buildStudentRow(int $rowNum, int $seq, array $student, array $schoolDay
 
     $absent = $tardy = 0;
     for ($pos = 1; $pos <= 25; $pos++) {
-        $col = colLetter(3 + $pos); // D=4 … AB=28
+        $col = colLetter(3 + $pos);
         $ref = "{$col}{$r}";
         $sty = $dayStyles[$pos];
 
@@ -154,7 +152,7 @@ function buildStudentRow(int $rowNum, int $seq, array $student, array $schoolDay
                 $cells .= strCell($ref, '/', $sty);
                 $tardy++;
             } else {
-                $cells .= emptyCell($ref, $sty); // present → blank
+                $cells .= emptyCell($ref, $sty);
             }
         } else {
             $cells .= emptyCell($ref, $emptyDayStyles[$pos]);
@@ -164,7 +162,6 @@ function buildStudentRow(int $rowNum, int $seq, array $student, array $schoolDay
     $cells .= numCell("AC{$r}", $absent, '158');
     $cells .= emptyCell("AD{$r}", '159');
     if ($tardy) {
-        // Replace the AD empty cell
         $cells = preg_replace('/<c r="AD' . $r . '"[^\/]*\/>/', numCell("AD{$r}", $tardy, '159'), $cells);
     }
     $cells .= emptyCell("AE{$r}", '666');
@@ -229,7 +226,6 @@ foreach ($males as $i => $st) {
     $newRows .= buildStudentRow($curRow, $i + 1, $st, $schoolDays, $attMap, $dayStyles, $emptyDayStyles);
     $curRow++;
 }
-// Male total row
 $newRows .= buildTotalRow(
     $curRow, $males, 'MALE  | TOTAL Per Day', $schoolDays, $attMap,
     '725','726','727','143','144','172','165','669','670','671'
@@ -240,23 +236,234 @@ foreach ($females as $i => $st) {
     $newRows .= buildStudentRow($curRow, $i + 1, $st, $schoolDays, $attMap, $dayStyles, $emptyDayStyles);
     $curRow++;
 }
-// Female total row
 $newRows .= buildTotalRow(
     $curRow, $females, 'FEMALE  | TOTAL Per Day', $schoolDays, $attMap,
     '678','679','680','178','179','158','159','681','682','683'
 );
 $curRow++;
 
-// Combined total row
 $newRows .= buildTotalRow(
     $curRow, $allStudents, '    Combined TOTAL PER DAY', $schoolDays, $attMap,
     '642','643','644','182','183','184','185','645','646','647'
 );
 $curRow++;
 
-// Separator row
 $newRows .= buildSeparatorRow($curRow);
 $curRow++;
+
+// ── Pure-PHP ZIP read/write ───────────────────────────────────────────────────
+// Requires only zlib (gzinflate/gzdeflate) which is compiled into PHP by default.
+// No php-zip extension, no shell commands needed.
+
+/**
+ * Locate the End of Central Directory record and return its fields.
+ */
+function _zipEocd(string $data): array|false
+{
+    $len = strlen($data);
+    // EOCD is at least 22 bytes; signature is PK\x05\x06
+    for ($i = $len - 22; $i >= max(0, $len - 22 - 65535); $i--) {
+        if (substr($data, $i, 4) === "\x50\x4b\x05\x06") {
+            return unpack('vdisk/vcdisk/vendisk/ventries/Vcdsize/Vcdoffset/vcomlen', substr($data, $i + 4, 18));
+        }
+    }
+    return false;
+}
+
+/**
+ * Parse all central directory entries from raw ZIP bytes.
+ * Returns an array of entry arrays, each with all CD fields plus
+ * 'filename', 'extra', 'comment'.
+ */
+function _zipParseCd(string $data, int $cdOffset, int $numEntries): array
+{
+    $entries = [];
+    $pos     = $cdOffset;
+    for ($i = 0; $i < $numEntries; $i++) {
+        if (substr($data, $pos, 4) !== "\x50\x4b\x01\x02") break;
+        $e = unpack(
+            'vver_made/vver_need/vflags/vmethod/vmod_time/vmod_date/Vcrc/Vcomp_sz/Vuncomp_sz/vfn_len/vex_len/vcm_len/vdisk_start/vint_attr/Vext_attr/Vlocal_off',
+            substr($data, $pos + 4, 42)
+        );
+        $e['filename'] = substr($data, $pos + 46, $e['fn_len']);
+        $e['extra']    = substr($data, $pos + 46 + $e['fn_len'], $e['ex_len']);
+        $e['comment']  = substr($data, $pos + 46 + $e['fn_len'] + $e['ex_len'], $e['cm_len']);
+        $entries[]     = $e;
+        $pos          += 46 + $e['fn_len'] + $e['ex_len'] + $e['cm_len'];
+    }
+    return $entries;
+}
+
+/**
+ * Read a single named entry from a ZIP file.
+ * Supports stored (method 0) and deflate (method 8).
+ */
+function zipRead(string $zipPath, string $entryName): string|false
+{
+    // ── Try ZipArchive first ──────────────────────────────────────────────────
+    if (class_exists('ZipArchive')) {
+        $z = new ZipArchive();
+        if ($z->open($zipPath) === true) {
+            $result = $z->getFromName($entryName);
+            $z->close();
+            return $result;
+        }
+    }
+
+    // ── Pure-PHP fallback ─────────────────────────────────────────────────────
+    $data = @file_get_contents($zipPath);
+    if ($data === false) return false;
+
+    $eocd = _zipEocd($data);
+    if (!$eocd) return false;
+
+    foreach (_zipParseCd($data, $eocd['cdoffset'], $eocd['ventries']) as $e) {
+        if ($e['filename'] !== $entryName) continue;
+
+        // Read local file header to get actual header size
+        $lpos = $e['local_off'];
+        $lh   = unpack('vver/vflags/vmethod/vmod_time/vmod_date/Vcrc/Vcomp_sz/Vuncomp_sz/vfn_len/vex_len', substr($data, $lpos + 4, 26));
+        $dataStart  = $lpos + 30 + $lh['fn_len'] + $lh['ex_len'];
+        $compressed = substr($data, $dataStart, $e['comp_sz']);
+
+        if ($e['method'] === 0) return $compressed;           // stored
+        if ($e['method'] === 8) return gzinflate($compressed); // deflate
+        return false;
+    }
+    return false;
+}
+
+/**
+ * Replace a single named entry inside a ZIP file with new string content.
+ * Rebuilds the entire archive in memory; safe for XLSX-sized files.
+ */
+function zipReplace(string $zipPath, string $entryName, string $newContent): bool
+{
+    // ── Try ZipArchive first ──────────────────────────────────────────────────
+    if (class_exists('ZipArchive')) {
+        $z = new ZipArchive();
+        if ($z->open($zipPath) === true) {
+            $z->addFromString($entryName, $newContent);
+            $z->close();
+            return true;
+        }
+    }
+
+    // ── Try shell fallback ────────────────────────────────────────────────────
+    if (function_exists('shell_exec')) {
+        $tmpDir = sys_get_temp_dir() . '/sf2pack_' . uniqid();
+        @mkdir($tmpDir, 0700, true);
+        $ret = null;
+        system('unzip -q ' . escapeshellarg($zipPath) . ' -d ' . escapeshellarg($tmpDir) . ' 2>/dev/null', $ret);
+        if ($ret === 0) {
+            $target = $tmpDir . '/' . $entryName;
+            @mkdir(dirname($target), 0700, true);
+            if (file_put_contents($target, $newContent) !== false) {
+                $escapedZip = escapeshellarg(realpath($zipPath));
+                system('cd ' . escapeshellarg($tmpDir) . ' && zip -r -q ' . $escapedZip . ' . 2>/dev/null', $ret);
+                shell_exec('rm -rf ' . escapeshellarg($tmpDir));
+                if ($ret === 0) return true;
+            } else {
+                shell_exec('rm -rf ' . escapeshellarg($tmpDir));
+            }
+        } else {
+            @rmdir($tmpDir);
+        }
+    }
+
+    // ── Pure-PHP fallback ─────────────────────────────────────────────────────
+    $data = @file_get_contents($zipPath);
+    if ($data === false) return false;
+
+    $eocd = _zipEocd($data);
+    if (!$eocd) return false;
+
+    $cdEntries = _zipParseCd($data, $eocd['cdoffset'], $eocd['ventries']);
+    if (empty($cdEntries)) return false;
+
+    // Precompute replacement data
+    $newCompressed   = gzdeflate($newContent, 6);
+    $newCrc          = crc32($newContent);
+    $newCompSz       = strlen($newCompressed);
+    $newUncompSz     = strlen($newContent);
+
+    $output   = '';
+    $newCdArr = [];
+
+    foreach ($cdEntries as $e) {
+        $lpos = $e['local_off'];
+        $lh   = unpack('vver/vflags/vmethod/vmod_time/vmod_date/Vcrc/Vcomp_sz/Vuncomp_sz/vfn_len/vex_len', substr($data, $lpos + 4, 26));
+        $fn   = substr($data, $lpos + 30, $lh['fn_len']);
+        $ex   = substr($data, $lpos + 30 + $lh['fn_len'], $lh['ex_len']);
+        $dataStart = $lpos + 30 + $lh['fn_len'] + $lh['ex_len'];
+
+        $newLocalOff = strlen($output);
+
+        if ($e['filename'] === $entryName) {
+            // Write updated local file header + deflated content
+            $output .= "\x50\x4b\x03\x04";
+            $output .= pack('vvvvvVVVvv',
+                20, 0, 8,                     // ver_need, flags, method (deflate)
+                $lh['mod_time'], $lh['mod_date'],
+                $newCrc, $newCompSz, $newUncompSz,
+                strlen($fn), 0                // extra stripped
+            );
+            $output .= $fn . $newCompressed;
+
+            // Update CD entry fields for the new entry
+            $e['method']   = 8;
+            $e['crc']      = $newCrc;
+            $e['comp_sz']  = $newCompSz;
+            $e['uncomp_sz'] = $newUncompSz;
+            $e['extra']    = '';
+            $e['ex_len']   = 0;
+        } else {
+            // Copy original local header + data verbatim
+            $origData = substr($data, $dataStart, $lh['comp_sz']);
+            $output  .= "\x50\x4b\x03\x04";
+            $output  .= pack('vvvvvVVVvv',
+                $lh['ver'], $lh['flags'], $lh['method'],
+                $lh['mod_time'], $lh['mod_date'],
+                $lh['crc'], $lh['comp_sz'], $lh['uncomp_sz'],
+                $lh['fn_len'], $lh['ex_len']
+            );
+            $output .= $fn . $ex . $origData;
+        }
+
+        $e['local_off'] = $newLocalOff;
+        $newCdArr[]     = $e;
+    }
+
+    // Write central directory
+    $cdStart = strlen($output);
+    foreach ($newCdArr as $e) {
+        $fn = $e['filename'];
+        $ex = $e['extra'];
+        $cm = $e['comment'];
+        $output .= "\x50\x4b\x01\x02";
+        $output .= pack('vvvvvvVVVvvvvvVV',
+            $e['ver_made'], $e['ver_need'], $e['flags'], $e['method'],
+            $e['mod_time'], $e['mod_date'],
+            $e['crc'], $e['comp_sz'], $e['uncomp_sz'],
+            strlen($fn), strlen($ex), strlen($cm),
+            $e['disk_start'], $e['int_attr'], $e['ext_attr'],
+            $e['local_off']
+        );
+        $output .= $fn . $ex . $cm;
+    }
+    $cdSize = strlen($output) - $cdStart;
+
+    // Write end of central directory
+    $output .= "\x50\x4b\x05\x06";
+    $output .= pack('vvvvVVv',
+        0, 0,
+        count($newCdArr), count($newCdArr),
+        $cdSize, $cdStart,
+        0
+    );
+
+    return file_put_contents($zipPath, $output) !== false;
+}
 
 // ── Load template ─────────────────────────────────────────────────────────────
 $templatePath = __DIR__ . '/../templates/sf2_template.xlsx';
@@ -268,98 +475,28 @@ if (!file_exists($templatePath)) {
 $tmpFile = tempnam(sys_get_temp_dir(), 'sf2_') . '.xlsx';
 copy($templatePath, $tmpFile);
 
-// ── ZIP helper: read/write sheet XML without requiring the php-zip extension ──
-// Tries ZipArchive first; falls back to shell unzip/zip commands.
-
-/**
- * Read a single file from a ZIP archive.
- * Returns the file contents as a string, or false on failure.
- */
-function zipReadFile(string $zipPath, string $entryName): string|false
-{
-    if (class_exists('ZipArchive')) {
-        $zip = new ZipArchive();
-        if ($zip->open($zipPath) !== true) return false;
-        $data = $zip->getFromName($entryName);
-        $zip->close();
-        return $data;
-    }
-
-    // Shell fallback
-    $tmpDir = sys_get_temp_dir() . '/sf2extract_' . uniqid();
-    @mkdir($tmpDir, 0700, true);
-    $cmd = 'unzip -p ' . escapeshellarg($zipPath) . ' ' . escapeshellarg($entryName) . ' 2>/dev/null';
-    $data = shell_exec($cmd);
-    @rmdir($tmpDir);
-
-    return ($data !== null && $data !== '') ? $data : false;
-}
-
-/**
- * Replace a single file inside a ZIP archive with new string content.
- * Returns true on success, false on failure.
- */
-function zipReplaceFile(string $zipPath, string $entryName, string $content): bool
-{
-    if (class_exists('ZipArchive')) {
-        $zip = new ZipArchive();
-        if ($zip->open($zipPath) !== true) return false;
-        $zip->addFromString($entryName, $content);
-        $zip->close();
-        return true;
-    }
-
-    // Shell fallback: extract to a temp dir, overwrite the file, repack
-    $tmpDir = sys_get_temp_dir() . '/sf2pack_' . uniqid();
-    @mkdir($tmpDir, 0700, true);
-
-    // Extract entire zip
-    $ret = null;
-    system('unzip -q ' . escapeshellarg($zipPath) . ' -d ' . escapeshellarg($tmpDir) . ' 2>/dev/null', $ret);
-    if ($ret !== 0) {
-        shell_exec('rm -rf ' . escapeshellarg($tmpDir));
-        return false;
-    }
-
-    // Write new content
-    $target = $tmpDir . '/' . $entryName;
-    @mkdir(dirname($target), 0700, true);
-    if (file_put_contents($target, $content) === false) {
-        shell_exec('rm -rf ' . escapeshellarg($tmpDir));
-        return false;
-    }
-
-    // Repack (zip requires running from inside the dir to preserve paths)
-    $escapedZip = escapeshellarg(realpath($zipPath));
-    $cmd = 'cd ' . escapeshellarg($tmpDir) . ' && zip -r -q ' . $escapedZip . ' . 2>/dev/null';
-    system($cmd, $ret);
-
-    shell_exec('rm -rf ' . escapeshellarg($tmpDir));
-    return $ret === 0;
-}
-
 // ── Read sheet XML ────────────────────────────────────────────────────────────
-$sheetXml = zipReadFile($tmpFile, 'xl/worksheets/sheet6.xml');
+$sheetXml = zipRead($tmpFile, 'xl/worksheets/sheet6.xml');
 if ($sheetXml === false) {
     ob_end_clean();
-    respondError('Failed to read SF2 template. Ensure the php-zip extension is enabled or that unzip/zip are available on this server.', 500);
+    respondError('Failed to read SF2 template (could not parse XLSX zip).', 500);
 }
 
-// ── Update K6: School Year (shared string → inlineStr) ───────────────────────
+// ── Update K6: School Year ────────────────────────────────────────────────────
 $sheetXml = preg_replace(
     '/<c r="K6"([^>]*)t="s"[^>]*>.*?<\/c>/s',
     '<c r="K6"$1t="inlineStr"><is><t>' . esc($sy) . '</t></is></c>',
     $sheetXml
 );
 
-// ── Update X6: Month name (shared string → inlineStr) ────────────────────────
+// ── Update X6: Month name ─────────────────────────────────────────────────────
 $sheetXml = preg_replace(
     '/<c r="X6"([^>]*)t="s"[^>]*>.*?<\/c>/s',
     '<c r="X6"$1t="inlineStr"><is><t>' . esc($monthName) . '</t></is></c>',
     $sheetXml
 );
 
-// ── Update AC8: Section (shared string → inlineStr) ──────────────────────────
+// ── Update AC8: Section ───────────────────────────────────────────────────────
 $sheetXml = preg_replace(
     '/<c r="AC8"([^>]*)t="s"[^>]*>.*?<\/c>/s',
     '<c r="AC8"$1t="inlineStr"><is><t>' . esc($section) . '</t></is></c>',
@@ -408,11 +545,9 @@ $sheetXml = preg_replace(
 );
 
 // ── Insert student rows before footer row 57 ─────────────────────────────────
-// Shift footer rows if students overflow 56
 $footerShift = max(0, $curRow - 57);
 
 if ($footerShift > 0) {
-    // Renumber all rows >= 57
     $sheetXml = preg_replace_callback(
         '/<row r="(\d+)"/',
         function($m) use ($footerShift) {
@@ -421,8 +556,6 @@ if ($footerShift > 0) {
         },
         $sheetXml
     );
-    // Also update cell references inside those rows (e.g. A57 → A(57+shift))
-    // This is complex, so instead we insert BEFORE the original footer marker
     $firstFooterRow = 57 + $footerShift;
     $sheetXml = str_replace('<row r="' . $firstFooterRow . '"', $newRows . '<row r="' . $firstFooterRow . '"', $sheetXml);
 } else {
@@ -438,9 +571,9 @@ $sheetXml = preg_replace(
 );
 
 // ── Write back and stream ─────────────────────────────────────────────────────
-if (!zipReplaceFile($tmpFile, 'xl/worksheets/sheet6.xml', $sheetXml)) {
+if (!zipReplace($tmpFile, 'xl/worksheets/sheet6.xml', $sheetXml)) {
     ob_end_clean();
-    respondError('Failed to write SF2 export. Ensure the php-zip extension is enabled or that unzip/zip are available on this server.', 500);
+    respondError('Failed to write SF2 export file.', 500);
 }
 
 $filename = 'SF2_' . preg_replace('/\s+/', '_', $section) . '_' . ucfirst(strtolower($monthName)) . '_' . $year . '.xlsx';
