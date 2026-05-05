@@ -265,16 +265,85 @@ if (!file_exists($templatePath)) {
     respondError('SF2 template not found on server.', 500);
 }
 
-$tmpFile = tempnam(sys_get_temp_dir(), 'sf2_');
+$tmpFile = tempnam(sys_get_temp_dir(), 'sf2_') . '.xlsx';
 copy($templatePath, $tmpFile);
 
-$zip = new ZipArchive();
-if ($zip->open($tmpFile) !== true) {
-    ob_end_clean();
-    respondError('Failed to open SF2 template.', 500);
+// ── ZIP helper: read/write sheet XML without requiring the php-zip extension ──
+// Tries ZipArchive first; falls back to shell unzip/zip commands.
+
+/**
+ * Read a single file from a ZIP archive.
+ * Returns the file contents as a string, or false on failure.
+ */
+function zipReadFile(string $zipPath, string $entryName): string|false
+{
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath) !== true) return false;
+        $data = $zip->getFromName($entryName);
+        $zip->close();
+        return $data;
+    }
+
+    // Shell fallback
+    $tmpDir = sys_get_temp_dir() . '/sf2extract_' . uniqid();
+    @mkdir($tmpDir, 0700, true);
+    $cmd = 'unzip -p ' . escapeshellarg($zipPath) . ' ' . escapeshellarg($entryName) . ' 2>/dev/null';
+    $data = shell_exec($cmd);
+    @rmdir($tmpDir);
+
+    return ($data !== null && $data !== '') ? $data : false;
 }
 
-$sheetXml = $zip->getFromName('xl/worksheets/sheet6.xml');
+/**
+ * Replace a single file inside a ZIP archive with new string content.
+ * Returns true on success, false on failure.
+ */
+function zipReplaceFile(string $zipPath, string $entryName, string $content): bool
+{
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath) !== true) return false;
+        $zip->addFromString($entryName, $content);
+        $zip->close();
+        return true;
+    }
+
+    // Shell fallback: extract to a temp dir, overwrite the file, repack
+    $tmpDir = sys_get_temp_dir() . '/sf2pack_' . uniqid();
+    @mkdir($tmpDir, 0700, true);
+
+    // Extract entire zip
+    $ret = null;
+    system('unzip -q ' . escapeshellarg($zipPath) . ' -d ' . escapeshellarg($tmpDir) . ' 2>/dev/null', $ret);
+    if ($ret !== 0) {
+        shell_exec('rm -rf ' . escapeshellarg($tmpDir));
+        return false;
+    }
+
+    // Write new content
+    $target = $tmpDir . '/' . $entryName;
+    @mkdir(dirname($target), 0700, true);
+    if (file_put_contents($target, $content) === false) {
+        shell_exec('rm -rf ' . escapeshellarg($tmpDir));
+        return false;
+    }
+
+    // Repack (zip requires running from inside the dir to preserve paths)
+    $escapedZip = escapeshellarg(realpath($zipPath));
+    $cmd = 'cd ' . escapeshellarg($tmpDir) . ' && zip -r -q ' . $escapedZip . ' . 2>/dev/null';
+    system($cmd, $ret);
+
+    shell_exec('rm -rf ' . escapeshellarg($tmpDir));
+    return $ret === 0;
+}
+
+// ── Read sheet XML ────────────────────────────────────────────────────────────
+$sheetXml = zipReadFile($tmpFile, 'xl/worksheets/sheet6.xml');
+if ($sheetXml === false) {
+    ob_end_clean();
+    respondError('Failed to read SF2 template. Ensure the php-zip extension is enabled or that unzip/zip are available on this server.', 500);
+}
 
 // ── Update K6: School Year (shared string → inlineStr) ───────────────────────
 $sheetXml = preg_replace(
@@ -369,8 +438,10 @@ $sheetXml = preg_replace(
 );
 
 // ── Write back and stream ─────────────────────────────────────────────────────
-$zip->addFromString('xl/worksheets/sheet6.xml', $sheetXml);
-$zip->close();
+if (!zipReplaceFile($tmpFile, 'xl/worksheets/sheet6.xml', $sheetXml)) {
+    ob_end_clean();
+    respondError('Failed to write SF2 export. Ensure the php-zip extension is enabled or that unzip/zip are available on this server.', 500);
+}
 
 $filename = 'SF2_' . preg_replace('/\s+/', '_', $section) . '_' . ucfirst(strtolower($monthName)) . '_' . $year . '.xlsx';
 
