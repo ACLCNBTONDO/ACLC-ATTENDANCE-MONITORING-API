@@ -16,7 +16,6 @@ $db->query("CREATE TABLE IF NOT EXISTS course_materials (
     section     VARCHAR(100) DEFAULT '',
     file_url    TEXT,
     file_type   VARCHAR(20) DEFAULT 'other',
-    class_time  VARCHAR(50) DEFAULT '',
     uploader    VARCHAR(150) DEFAULT '',
     user_id     INT,
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
