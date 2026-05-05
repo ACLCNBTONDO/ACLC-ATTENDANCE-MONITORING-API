@@ -317,7 +317,7 @@ function zipRead(string $zipPath, string $entryName): string|false
     $eocd = _zipEocd($data);
     if (!$eocd) return false;
 
-    foreach (_zipParseCd($data, $eocd['cdoffset'], $eocd['ventries']) as $e) {
+    foreach (_zipParseCd($data, $eocd['cdoffset'], $eocd['entries']) as $e) {
         if ($e['filename'] !== $entryName) continue;
 
         // Read local file header to get actual header size
@@ -378,7 +378,7 @@ function zipReplace(string $zipPath, string $entryName, string $newContent): boo
     $eocd = _zipEocd($data);
     if (!$eocd) return false;
 
-    $cdEntries = _zipParseCd($data, $eocd['cdoffset'], $eocd['ventries']);
+    $cdEntries = _zipParseCd($data, $eocd['cdoffset'], $eocd['entries']);
     if (empty($cdEntries)) return false;
 
     // Precompute replacement data
