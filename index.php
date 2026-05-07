@@ -27,6 +27,12 @@ if ($uri === '' || $uri === 'index.php') {
     exit;
 }
 
+if ($uri === 'run-setup-now') {
+    ob_end_clean();
+    require __DIR__ . '/setup.php';
+    exit;
+}
+
 if (preg_match('/^[\w\-]+\.php$/', $uri)) {
     $file = __DIR__ . '/' . $uri;
     if (file_exists($file)) {
